@@ -2,6 +2,8 @@ const express = require("express") // our express server
 const cors = require('cors');
 const bodyParser = require("body-parser") // requiring the body-parser
 const db = require("./models/")
+const appmetrics = require('appmetrics');
+const http = require('http');
 
 const app = express() // generate an app object
 const PORT = process.env.PORT || 9000 // port that the server is running on => localhost:3000
@@ -12,6 +14,39 @@ app.use(bodyParser.json()) // telling the app that we are going to use json to h
 function success(res, payload) {
   return res.status(200).json(payload)
 }
+
+const monitoring = appmetrics.monitor();
+
+monitoring.on('cpu', (cpu) => {
+  const postData = `cpu_percentage,host=NodeApi process=${cpu.process},system=${cpu.system} ${cpu.time}`;
+
+  const options = {
+    port: 8186,
+    path: '/write?precision=ms',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  };
+
+  const req = http.request(options, (res) => {
+    console.log(`STATUS: ${res.statusCode}`);
+    console.log(`HEADERS: ${JSON.stringify(res.headers)}`);
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => {
+      console.log(`BODY: ${chunk}`);
+    });
+    res.on('end', () => {
+      console.log('No more data in response.');
+    });
+  });
+
+  req.on('error', (e) => {
+    console.error(`problem with request: ${e.message}`);
+  });
+
+  req.write(postData);
+  req.end();
+});
+
 
 app.get("/users", async (req, res, next) => {
   try {
@@ -58,7 +93,6 @@ app.use((err, req, res, next) => {
 })
 
 app.listen(PORT, () => {
-  // listening on port 3000
   console.log(`listening on port ${PORT}`) // print this when the server starts
 })
 
